@@ -5,32 +5,19 @@
             [wire.up.show   :as wired :include-macros true]
             [wire.core      :as w]
             [goog.events    :as events]
-            [goog.style     :as gstyle])
+            [goog.style     :as gstyle]
+
+            [ctrlrm.stores :as stores]
+            [ctrlrm.sortable-store :as store.sortable])
+
   (:import  [goog.events EventType]))
+
+(enable-console-print!)
 
 (show/defclass BaseRenderedItem [component]
   (render [{:keys [wire hotspot-wire] :as props} state]
     (wired/div hotspot-wire
       (wired/p wire (:title props)))))
-
-(defn extract-at-position
-  "return new sequence with item removed at index"
-  [index list]
-  (let [[i v] (split-at index list)]
-    (concat i (rest v))))
-
-(defn inject-at-position
-  "return new sequence with item injected into index"
-  [list item index]
-  (let [[i v] (split-at (- index 1) list)]
-    (concat i [item] v)))
-
-(defn swap-item
-  "return new sequence with item swapped into new index"
-  [sorted-list item index]
-  (-> (.indexOf (clj->js sorted-list) item)
-      (extract-at-position sorted-list)
-      (inject-at-position item index)))
 
 (defn determine-pos
   "Calculate position of floating li, returning a position map. Ensuring to
@@ -42,8 +29,10 @@
 (defn dragging
   "Send sort-drag message up the wire with calculated position data"
   [wire evt dom-pos cursor-start-pos]
-  (let [cursor-current-pos {:x (.-pageX (:event evt)), :y (.-pageY (:event evt))}]
-    (w/act wire :sort-drag (determine-pos dom-pos cursor-start-pos cursor-current-pos))))
+  (let [cursor-current-pos {:x (.-pageX (:event evt))
+                            :y (.-pageY (:event evt))}]
+    (w/act wire :sort-drag
+           (determine-pos dom-pos cursor-start-pos cursor-current-pos))))
 
 (defn stop-sort
   "Send sort-end message up the wire and detach temporary wire from window. We
@@ -74,11 +63,6 @@
         (w/tap :mouse-up   #(stop-sort wire %))
         (wire-up js/window))))
 
-(def base-item-style
-  {:cursor "pointer"
-   :user-select "none"
-   :-webkit-user-select "none"})
-
 (defn tap-sort-item
   "Single wiretap on the li, only listening for the mousedown dom event to
   initiate the start of the sorting"
@@ -98,24 +82,31 @@
   (render [{:as props :keys [wire item-props item-component selected?
                              item-top]}
            {:as state :keys [sorting]}]
-    (dom/li {:className (show/class-map {"selected" selected?})
-             :style base-item-style}
+    (dom/li {:className (show/class-map {"selected" selected?})}
       (item-component (merge item-props
-                             {:wire          wire
-                              :hotspot-wire (tap-sort-item component wire) })))))
+                             {:hotspot-wire (tap-sort-item component wire)})))))
 
 (show/defclass FloatingItem
   "Floating display only copy of selected SortedItem. We pass in a junk wire to
   ensure that none of the events can pass"
   [component]
-  (render [{:keys [item-component item-props wire pos]} state]
-    (dom/li {:style (merge base-item-style
-                           {:opacity 0.95
-                            :position "absolute"
-                            :cursor "move"
-                            :backgroundColor "#eee"
-                            :top (:y pos)
-                            :left (:x pos)})}
+  (mixins stores/PlugCallbackMixin)
+  (will-mount
+    (show/assoc! component ::stores/cbs
+     [(stores/register-changes
+        store.sortable/store :dragging
+        (fn [_]
+          (show/assoc! component :pos
+                       (store.sortable/sget :floating-pos))))]))
+
+  (render [{:as props :keys [item-component item-props wire]}
+           {:as state :keys [pos]}]
+    (dom/li {:style {:opacity 0.95
+                     :position "absolute"
+                     :cursor "move"
+                     :backgroundColor "#eee"
+                     :top (:y pos)
+                     :left (:x pos)}}
       (item-component (merge item-props {:hotspot-wire (w/wire)
                                          :wire (w/wire)})))))
 
@@ -125,33 +116,29 @@
   Sortable component"
   [wire component]
   (w/taps wire
-    :sort-start  #(show/assoc! component
-                               :selected-id (:id %)
-                               :floating-pos {:x (:x %) :y (:y %)}
-                               :sorting true)
-    :sort-drag   #(show/assoc! component :floating-pos %)
-    :sort-end    #(show/assoc! component :sorting false)
-    :init-offset #(show/assoc-in! component [:offsets-by-id (:id %)]
-                                  (+ (:offset %)))))
+    :sort-start  #(store.sortable/start-sort (:id %)
+                                             {:x (:x %) :y (:y %)})
+    :sort-drag   #(store.sortable/update-dragging (select-keys % [:x :y]))
+    :sort-end    #(store.sortable/end-sort)
+    :init-offset #(store.sortable/update-offset (:id %) (:offset %))))
 
 (defn build-sorted-items
   "Build the sequence of SortedItem components. We are also laying the items id
   so we can keep track of which sorted item is being acted upon. Notice we
   passed nil for the namespace since we have no use for it"
-  [wire sorted-ids items-by-id item-component selected-id sorting offsets-by-id]
-  (for [id sorted-ids]
-    (let [item (get items-by-id id)]
-      (SortedItem {:key id
-                   :wire (w/lay wire nil {:id id})
-                   :selected? (and sorting (= id selected-id))
-                   :item-top (get offsets-by-id id)
-                   :item-props item
-                   :item-component item-component}))))
+  [wire item-component]
+  (for [id (store.sortable/sget :sorted-ids)]
+    (SortedItem {:key id
+                 :wire (w/lay wire nil {:id id})
+                 :selected?  (store.sortable/is-selected? id)
+                 :item-top   (store.sortable/sget [:offsets-by-id id])
+                 :item-props (store.sortable/get-item id)
+                 :item-component item-component})))
 
 (defn build-floating-item
   "Build FloatingItem component"
   [wire props state]
-  (FloatingItem {:item-props (get (:items-by-id state) (:selected-id state))
+  (FloatingItem {:item-props (store.sortable/selected-item)
                  :wire wire
                  :item-component (:item-component props)
                  :pos (:floating-pos state)}))
@@ -167,46 +154,25 @@
     item-key - optional key for retrieving id from list of items (defaults to :id)
     wire     - optional wire for recieving sorting events"
   [component]
+  (mixins stores/PlugCallbackMixin)
   (default-props []
     {:item-component BaseRenderedItem
+     :wire           (w/wire)
      :item-key       :id})
-  (initial-state []
-    (let [{:keys [wire item-key items]} (show/get-props component)
-          sorted-ids (map item-key items)]
-      {:wire           (or wire (w/wire))
-       :sorted-ids     sorted-ids
-       :height-seq     []
-       :offsets-by-id  (into {} (map (fn [id] [id nil]) sorted-ids))
-       :items-by-id    (into {} (map (fn [item] [(get item item-key) item]) items))
-       :floating-pos   {:x 0 :y 0}
-       :selected-idx   nil
-       :selected-id    nil
-       :sorting        false}))
-  (did-update [prev-props prev-state]
-    ;; Update height sequence when new offsets are passed
-    (let [offsets (show/get-state component :offsets-by-id)]
-      (if (not= (:offsets-by-id prev-state) offsets)
-        (show/assoc! component :height-seq
-                     (for [id (show/get-state component :sorted-ids)]
-                       (get offsets id)))))
-    ;; Reshuffle sorted-ids vector when dragged past neighbor thresholds
-    (let [floating-pos (show/get-state component :floating-pos)]
-      (if (not= (:floating-pos prev-state) floating-pos)
-        (let [[idx _] (split-with (partial >= (:y floating-pos))
-                                  (show/get-state component :height-seq))
-              idx (count idx)
-              id (show/get-state component :selected-id)]
-          (if (not= idx (show/get-state component :selected-idx))
-            (show/update-in! component :sorted-ids
-                             (fn [old] (swap-item old id idx))))))))
-  (render [{:as props :keys [item-component]}
-           {:as state :keys [wire sorting sorted-ids items-by-id
-                             selected-id offsets-by-id]}]
-    (let [sortable-wire (tap-sortables wire component)
-          sorted-list   (build-sorted-items sortable-wire sorted-ids items-by-id
-                                            item-component selected-id sorting
-                                            offsets-by-id)
-          sorted-list   (if sorting
+  (will-mount
+    (show/assoc! component ::stores/cbs
+      [(stores/register-changes
+         store.sortable/store
+         (fn [_] (show/force-update! component)))])
+    (store.sortable/init
+      (select-keys (show/get-props component) [:items :item-key])))
+
+  (render [{:as props :keys [wire item-key item-component items]}
+           {:as state :keys [sorting sorted-ids selected-id offsets-by-id]}]
+    (let [items-by-id   (into {} (map (fn [item] [(get item item-key) item]) items))
+          sortable-wire (tap-sortables wire component)
+          sorted-list   (build-sorted-items sortable-wire item-component)
+          sorted-list   (if (store.sortable/is-sorting?)
                           (conj sorted-list
                             (build-floating-item wire props state))
                           sorted-list)]
