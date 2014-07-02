@@ -1,0 +1,33 @@
+.hidden {
+  display: none;
+}
+body {
+  margin: 0px;
+}
+.sort-list {
+  list-style: none;
+  padding: 0px;
+}
+.sort-list li {
+  width: 100%;
+  height: 60px;
+  background-color: #FFF;
+  list-decoration: none;
+  border-bottom: 1px solid #aaa;
+  padding: 10px;
+}
+.sort-list li.selected {
+  opacity: 0;
+}
+.sort-list p {
+  display: block;
+  padding: 0px;
+  margin: 0px;
+  float: left;
+}
+.hotspot {
+  background-color: red;
+  width: 100px;
+  height: 60px;
+  float: left;
+}

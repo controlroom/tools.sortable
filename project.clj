@@ -17,4 +17,11 @@
                  :output-to  "examples/basic/main.js"
                  :optimizations  :none
                  :output-wrapper false
+                 :source-map     true }}
+     {:id "hotspot"
+      :source-paths ["examples/hotspot/src" "src"]
+      :compiler {:output-dir "examples/hotspot/out"
+                 :output-to  "examples/hotspot/main.js"
+                 :optimizations  :none
+                 :output-wrapper false
                  :source-map     true }}]})

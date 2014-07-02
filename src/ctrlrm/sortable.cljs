@@ -9,8 +9,9 @@
   (:import  [goog.events EventType]))
 
 (show/defclass BaseRenderedItem [component]
-  (render [{:keys [wire] :as props} state]
-    (wired/p wire (:title props))))
+  (render [{:keys [wire hotspot-wire] :as props} state]
+    (wired/div hotspot-wire
+      (wired/p wire (:title props)))))
 
 (defn extract-at-position
   "return new sequence with item removed at index"
@@ -82,7 +83,7 @@
   "Single wiretap on the li, only listening for the mousedown dom event to
   initiate the start of the sorting"
   [component wire]
-  (w/tap wire :mouse-down #(start-sort component wire %)))
+  (w/tap (w/wire) :mouse-down #(start-sort component wire %)))
 
 (show/defclass SortedItem
   "List item, acting as a wrapper that will capture mouse down click for
@@ -97,10 +98,11 @@
   (render [{:as props :keys [wire item-props item-component selected?
                              item-top]}
            {:as state :keys [sorting]}]
-    (wired/li (tap-sort-item component wire)
-              {:className (show/class-map {"selected" selected?})
-               :style base-item-style}
-      (item-component (merge item-props {:wire wire})))))
+    (dom/li {:className (show/class-map {"selected" selected?})
+             :style base-item-style}
+      (item-component (merge item-props
+                             {:wire          wire
+                              :hotspot-wire (tap-sort-item component wire) })))))
 
 (show/defclass FloatingItem
   "Floating display only copy of selected SortedItem. We pass in a junk wire to
@@ -114,7 +116,8 @@
                             :backgroundColor "#eee"
                             :top (:y pos)
                             :left (:x pos)})}
-      (item-component (merge item-props {:wire (w/wire)})))))
+      (item-component (merge item-props {:hotspot-wire (w/wire)
+                                         :wire (w/wire)})))))
 
 (defn tap-sortables
   "Setup wiretaps for all the sortable actions that are passed back from the
@@ -122,13 +125,14 @@
   Sortable component"
   [wire component]
   (w/taps wire
-    :sort-start  (fn [o] (doto component
-                           (show/assoc! :selected-id (:id o))
-                           (show/assoc! :floating-pos {:x (:x o) :y (:y o)})
-                           (show/assoc! :sorting true)))
+    :sort-start  #(show/assoc! component
+                               :selected-id (:id %)
+                               :floating-pos {:x (:x %) :y (:y %)}
+                               :sorting true)
     :sort-drag   #(show/assoc! component :floating-pos %)
     :sort-end    #(show/assoc! component :sorting false)
-    :init-offset #(show/assoc! component [:offsets-by-id (:id %)] (+ (:offset %)))))
+    :init-offset #(show/assoc-in! component [:offsets-by-id (:id %)]
+                                  (+ (:offset %)))))
 
 (defn build-sorted-items
   "Build the sequence of SortedItem components. We are also laying the items id
@@ -193,8 +197,8 @@
               idx (count idx)
               id (show/get-state component :selected-id)]
           (if (not= idx (show/get-state component :selected-idx))
-            (show/update! component :sorted-ids
-                          (fn [old] (swap-item old id idx))))))))
+            (show/update-in! component :sorted-ids
+                             (fn [old] (swap-item old id idx))))))))
   (render [{:as props :keys [item-component]}
            {:as state :keys [wire sorting sorted-ids items-by-id
                              selected-id offsets-by-id]}]
