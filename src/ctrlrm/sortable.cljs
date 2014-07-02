@@ -91,14 +91,15 @@
   ensure that none of the events can pass"
   [component]
   (mixins stores/PlugCallbackMixin)
+  (initial-state
+    {:pos (store.sortable/sget :floating-pos)})
   (will-mount
     (show/assoc! component ::stores/cbs
-     [(stores/register-changes
-        store.sortable/store :dragging
-        (fn [_]
-          (show/assoc! component :pos
-                       (store.sortable/sget :floating-pos))))]))
-
+      [(stores/register-changes
+         store.sortable/store :dragging
+         (fn [_]
+           (show/assoc! component :pos
+                        (store.sortable/sget :floating-pos))))]))
   (render [{:as props :keys [item-component item-props wire]}
            {:as state :keys [pos]}]
     (dom/li {:style {:opacity 0.95
