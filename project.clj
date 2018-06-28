@@ -1,12 +1,15 @@
-(defproject controlroom/ctrlrm.sortable "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
-  :url "http://example.com/FIXME"
+(defproject controlroom/tools.sortable "0.1.0-SNAPSHOT"
+  :description "Sortable objects using drag and drop"
+  :url "https://ctrlrm.io/tools.sortable"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.6.0"]
-                 [org.clojure/clojurescript "0.0-2202"]]
+  :dependencies [[org.clojure/clojure "1.9.0"]
+                 [org.clojure/clojurescript "1.10.329"]
 
-  :plugins [[lein-cljsbuild "1.0.3"]]
+                 [controlroom/wire "0.2.0"]
+                 [controlroom/show "0.8.0-SNAPSHOT"]]
+
+  :plugins [[lein-cljsbuild "1.1.7"]]
 
   :source-paths ["src"]
   :cljsbuild
@@ -17,11 +20,19 @@
                  :output-to  "examples/basic/main.js"
                  :optimizations  :none
                  :output-wrapper false
-                 :source-map     true }}
+                 :source-map     true}}
      {:id "hotspot"
       :source-paths ["examples/hotspot/src" "src"]
       :compiler {:output-dir "examples/hotspot/out"
                  :output-to  "examples/hotspot/main.js"
                  :optimizations  :none
                  :output-wrapper false
-                 :source-map     true }}]})
+                 :source-map     true }}
+     {:id "updated"
+      :source-paths ["examples/updated/src" "src"]
+      :compiler {:output-dir "examples/updated/out"
+                 :output-to  "examples/updated/main.js"
+                 :optimizations  :none
+                 :output-wrapper false
+                 :source-map     true }}
+     ]})

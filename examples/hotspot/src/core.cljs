@@ -8,24 +8,23 @@
 ;; Debug and such
 (def items (for [i (range 10)] {:id i :title (str "item-" i)}))
 
-(show/defclass HotspotItem [component]
+(show/defcomponent HotspotItem [component]
   (initial-state
     {:counter 0})
-  (will-mount
+  (did-mount
     (js/setInterval
-      #(if (.isMounted component) (show/update-in! component [:counter] inc))
+      #(show/update-in! component [:counter] inc)
       1000))
   (render [props state]
     (wired/div (:hotspot-wire props)
-      (dom/div {:className "hotspot"})
-      (dom/p {:className "text"} (str (:title props) (:counter state))))))
-
+      (dom/div {:class "hotspot"})
+      (dom/p {:class "text"} (str (:title props) (:counter state))))))
 
 (defn tapped []
   (w/taps (w/wire)
     {:class :sortable} #(js/console.log %)))
 
-(show/render-component
+(show/render-to-dom
   (Sortable {:item-component HotspotItem
              :wire (tapped)
              :items items
