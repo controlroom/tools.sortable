@@ -15,6 +15,7 @@
 
 ;; Utility functions
 ;;
+
 (defn get-item-by-id [component id]
   (show/get-state component [:items-by-id id]))
 
@@ -23,21 +24,6 @@
                (into {} (map (fn [item]
                                [(get item item-key) item])
                              items))))
-
-(defn update-height [component id height]
-  (show/assoc-in! component [:height-by-id id] height)
-  (show/assoc! component :height-seq
-               (loop [ids (show/get-state component :sorted-ids)
-                      h 0
-                      heights []]
-                 (if-not (seq ids)
-                   heights
-                   (let [id (first ids)
-                         height (show/get-state component [:height-by-id id])]
-                     (recur
-                       (rest ids)
-                       (+ h height)
-                       (conj heights h)))))))
 
 ;; Sortable
 ;;
@@ -50,11 +36,11 @@
   "Calculate position of floating li, returning a position map. Ensuring to
   constrain x position"
   [dom-pos cursor-start-pos cursor-current-pos]
-  {:x (:x dom-pos)
+  {:x (+ (:x dom-pos) (- (:x cursor-current-pos) (:x cursor-start-pos)))
    :y (+ (:y dom-pos) (- (:y cursor-current-pos) (:y cursor-start-pos)))})
 
 (defn dragging
-  "Send sort-drag message up the wire with calculated position data"
+  "Send sort-dragging message up the wire with calculated position data"
   [wire evt dom-pos cursor-start-pos]
   (let [cursor-current-pos {:x (.-pageX (:event evt))
                             :y (.-pageY (:event evt))}]
@@ -105,9 +91,14 @@
     (let [node (show/get-node component)]
       (js/setTimeout
         (fn [_]
-          (let [y (.-y (gstyle/getPosition node))
+          (let [wire (show/get-props component :wire)
+                y (.-y (gstyle/getPosition node))
                 height (.-height (gstyle/getSize node))]
-            (w/act (show/get-props component :wire) :init-height {:height height})
+            ;; Old
+            (w/act wire :init-height {:height height})
+            ;; New
+            (w/act wire :init-dimensions {:size (gstyle/getSize node)
+                                          :position (gstyle/getPosition node)})
             (println "item mounted y: " y " height: " height)))
         50)))
   (render [{:as props :keys [wire item-props item-component selected?]}
@@ -135,11 +126,11 @@
   "Build the sequence of SortedItem components. We are also laying the items id
   so we can keep track of which sorted item is being acted upon"
   [wire component item-component]
-  (let [{:keys [wire selected? sorted-ids]} (show/get-state component)]
+  (let [{:keys [wire selected-id sorted-ids]} (show/get-state component)]
     (for [id sorted-ids]
       (SortedItem {:key id
                    :wire (w/lay wire nil {:id id})
-                   :selected? selected?
+                   :selected? (= selected-id id)
                    :item-props (get-item-by-id component id)
                    :item-component item-component}))))
 
@@ -181,7 +172,7 @@
 (defn- sort-dragging
   [component floating-pos]
   (show/assoc! component :floating-pos floating-pos)
-  (println "pos: " (:y floating-pos) (show/get-state component :height-seq))
+  ;; (println "pos: " (:y floating-pos) (show/get-state component :height-seq))
   (let [{:keys [height-seq selected-idx selected-id]} (show/get-state component)
         [idx _] (split-with (partial >= (:y floating-pos)) height-seq)
         idx (count idx)]
@@ -189,24 +180,50 @@
       (show/assoc! component :selected-idx (dec idx))
       (show/update! component :sorted-ids #(swap-item % selected-id idx))
 
-      (w/act (show/get-state component :wire) ::updated-sort
+      (w/act (show/get-state component :wire) ::sorting-updated
         {:item-id selected-id
          :updated-idx (dec idx)
          :sort (show/get-state component :sorted-ids)}))))
 
 (defn- sort-ended [component]
-  (show/assoc! component :sorting? false))
+  (let [{:keys [wire selected-id selected-idx sorted-ids]} (show/get-state component)]
+    (w/act wire ::sorting-ended
+      {:item-id selected-id
+       :updated-idx selected-idx
+       :sort sorted-ids})
+
+    (show/assoc! component
+      :sorting? false
+      :selected-id nil
+      :selected-idx nil)))
+
+(defn update-height [component id height]
+  (show/assoc-in! component [:height-by-id id] height)
+  (show/assoc! component :height-seq
+               (loop [ids (show/get-state component :sorted-ids)
+                      h 0
+                      heights []]
+                 (if-not (seq ids)
+                   heights
+                   (let [id (first ids)
+                         height (show/get-state component [:height-by-id id])]
+                     (recur
+                       (rest ids)
+                       (+ h height)
+                       (conj heights h)))))))
+
 
 (defn tap-sortables
   "Setup wiretaps for all the sortable actions that are passed back from the
-  SortedItem components. We use the assoc! fn to update the state of the main
-  Sortable component"
+  SortedItem components"
   [wire component]
   (w/taps wire
-    :sort-started  #(sort-started component (:id %) {:x (:x %) :y (:y %)})
-    :sort-dragging #(sort-dragging component (select-keys % [:x :y]))
-    :sort-ended    #(sort-ended component)
-    :init-height   #(update-height component (:id %) (:height %))))
+    :sort-started    #(sort-started component (:id %) {:x (:x %) :y (:y %)})
+    :sort-dragging   #(sort-dragging component (select-keys % [:x :y]))
+    :sort-ended      #(sort-ended component)
+    :init-dimensions #(println %)
+    :init-height     #(update-height component (:id %) (:height %))))
+
 
 (show/defcomponent Sortable
   "Base sortable React/show class.
@@ -223,13 +240,23 @@
   (default-props
     {:item-component BaseRenderedItem
      :wire           (w/wire)
-     :item-key       :id})
+     :item-key       :id })
 
   (initial-state [{:keys [wire items item-key sorted-ids]}]
     {:wire (tap-sortables wire component)
      :sorted-ids (or sorted-ids (mapv item-key items))
+
+     ;; Dimentions
+     :dimentions-by-id {}
+
+     ;; Heights
      :height-seq []
      :height-by-id {}
+     ;; Widths
+     :width-seq []
+     :width-by-id {}
+
+     ;; Selected states
      :floating-pos {:x 0 :y 0}
      :selected-idx nil
      :selected-id nil
@@ -245,7 +272,7 @@
     (when (not= (show/get-props component :items) items)
       (normalize-items component items item-key)))
 
-  (render [{:as props :keys [item-key item-component]}
+  (render [{:as props :keys [container-id container-classes item-key item-component]}
            {:as state :keys [wire sorting? sorted-ids selected-id offsets-by-id]}]
     (let [sorted-list (build-sorted-items wire component item-component)
           sorted-list (if sorting?
@@ -253,5 +280,8 @@
                           (floating-item wire component selected-id props state))
                         sorted-list)]
       ;; List out all the sortable items, even the selected ones
-      (dom/ul {:key "list" :class "sort-list"}
+      (dom/ul
+        (cond-> {:key "list" :class "sort-list"}
+          container-id (assoc :id container-id)
+          container-classes (update :class #(str % " " container-classes)))
         sorted-list))))

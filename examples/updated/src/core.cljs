@@ -60,7 +60,7 @@
   (w/taps (w/wire)
     :mouse-click
     (fn [] (add-item component))
-    ::tools.sortable/finished-sort
+    ::tools.sortable/sorting-endeds
     (fn [data]
       (reset! sorted-ids (:sort data)))))
 

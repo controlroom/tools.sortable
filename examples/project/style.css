@@ -1,0 +1,18 @@
+#lanes {
+  display: flex;
+  flex-direction: row;
+}
+
+#lanes li div {
+  margin: 10px;
+}
+
+.sort-list {
+  list-style: none;
+  padding: 0px;
+}
+
+.sort-list li {
+  background-color: #FFF;
+  list-decoration: none;
+}

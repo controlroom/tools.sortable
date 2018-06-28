@@ -13,10 +13,17 @@ body {
   background-color: #FFF;
   list-decoration: none;
   border-bottom: 1px solid #aaa;
+}
+.sort-list li div {
   padding: 10px;
 }
+.sort-list li div:hover {
+  background-color: #eee;
+  cursor: pointer;
+}
 .sort-list li.selected {
-  opacity: 0;
+  opacity: 0.1;
+  background-color: #555;
 }
 .sort-list p {
   display: block;
