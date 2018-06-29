@@ -4,7 +4,7 @@
     [show.dom :as dom]
     [wire.up.show :as wired]
     [wire.core :as w]
-    [tools.sortable :refer [Sortable]]))
+    [tools.sortable :refer [group-wire-tap Sortable]]))
 
 (show/defcomponent Task [component]
   (initial-state
@@ -19,7 +19,7 @@
     (dom/div {:class "lane"}
       (wired/h2 hotspot-wire title)
       (Sortable
-        {:name :project-task
+        {:key :project-task
          :group-id :project-tasks
          :item-component Task
          :items items}))))
@@ -40,14 +40,14 @@
 (show/defcomponent App [component]
   ;; Allow a wire to be passed in as props
   (default-props
-    {:wire (w/wire)})
+    {:wire (group-wire-tap (w/wire))})
   ;; Tap wire and add items to state. This is where we will update them
   (initial-state [{:as props :keys [wire]}]
     {:wire (app-tap wire component)
      :items items})
   (render [_ {:as state :keys [wire items]} ]
     (Sortable
-      {:name :project-lane
+      {:key :project-lane
        :items items
        :item-component Lane
        :item-key :id

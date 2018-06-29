@@ -3,13 +3,16 @@
      - Group wire. Build a wire that can be passed into Sortables that
    will keep track of the refs. This might be even better!"
   (:require
-    [show.core    :as show]
-    [show.dom     :as dom]
-    [wire.up.dom  :refer [wire-up unwire]]
-    [wire.up.show :as wired]
-    [wire.core    :as w]
-    [goog.events  :as events]
-    [goog.style   :as gstyle])
+    [show.core      :as show]
+    [show.dom       :as dom]
+    [wire.up.dom    :refer [wire-up unwire]]
+    [wire.up.show   :as wired]
+    [wire.core      :as w]
+    [goog.object    :as gobj]
+    [goog.math      :as gmath]
+     goog.math.Vec2
+    [goog.style     :as gstyle])
+
 
   (:import
     [goog.events EventType]))
@@ -34,28 +37,24 @@
     (wired/div hotspot-wire
       (wired/p wire (:title props)))))
 
-(defn determine-pos
-  "Calculate position of floating li, returning a position map. Ensuring to
-  constrain x position"
-  [dom-pos cursor-start-pos cursor-current-pos]
-  {:x (+ (:x dom-pos) (- (:x cursor-current-pos) (:x cursor-start-pos)))
-   :y (+ (:y dom-pos) (- (:y cursor-current-pos) (:y cursor-start-pos)))})
-
-(defn dragging
-  "Send sort-dragging message up the wire with calculated position data"
-  [wire evt dom-pos cursor-start-pos]
-  (let [cursor-current-pos {:x (.-pageX (:event evt))
-                            :y (.-pageY (:event evt))}]
-    (w/act wire :sort-dragging
-           (determine-pos dom-pos cursor-start-pos cursor-current-pos))))
-
 (defn stop-sort
   "Send sort-end message up the wire and detach temporary wire from window. We
   can reference the original calling wire since it is passed into the callback
   in the wiretap"
   [wire evt]
-  (w/act wire :sort-ended)
+  (w/act wire ::sort-ended)
   (unwire (::wire.core/wire evt) js/window))
+
+(defn vec-from-mouse-event [evt]
+  (goog.math.Vec2. (.-movementX evt) (.-movementY evt)))
+
+(defn dragging
+  "Send sort-dragging message up the wire with calculated position data"
+  [wire {:as evt :keys [event]} cursor-pos item-bounds]
+  (let [movement (goog.math.Vec2. (.-movementX event) (.-movementY event))]
+    (.translate cursor-pos movement)
+    (.translate item-bounds movement)
+    (w/act wire ::sort-dragging {::bounds item-bounds})))
 
 (defn start-sort
   "Initiates beginning of sort with sort-start wire message and creates and
@@ -66,15 +65,14 @@
   This window wire has specific wiretaps to listen to global mouse events. We
   close over properties that will be useful (dom-pos, cursor-pos) when
   capturing later mouse actions"
-  [component wire evt]
-  (let [g-pos      (gstyle/getPosition (show/get-node component))
-        m-event    (:event evt)
-        dom-pos    {:x (.-x g-pos), :y (.-y g-pos)}
-        cursor-pos {:x (.-pageX m-event), :y (.-pageY m-event)}]
-    (w/act wire :sort-started (determine-pos dom-pos cursor-pos cursor-pos))
+  [component wire {:as evt :keys [event]}]
+  (let [item-bounds (gstyle/getBounds (show/get-node component))
+        cursor-pos  (goog.math.Vec2. 0 0)]
+
+    (w/act wire ::sort-started {::bounds item-bounds})
 
     (-> (w/wire)
-        (w/tap :mouse-move #(dragging wire % dom-pos cursor-pos))
+        (w/tap :mouse-move #(dragging wire % cursor-pos item-bounds))
         (w/tap :mouse-up   #(stop-sort wire %))
         (wire-up js/window))))
 
@@ -91,29 +89,10 @@
   [component]
   (initial-state
     {:item-ref (show/create-ref)})
-  (will-unmount
-    (let [{:keys [item-refs item-id]} (show/get-props component)]
-      (swap! item-refs dissoc item-id)))
   (did-mount
-    (let [node (show/get-node component)
-          {:keys [item-refs item-id]} (show/get-props component)
-          {:keys [item-ref]} (show/get-state component)]
-      (swap! item-refs assoc item-id item-ref)
-      (js/setTimeout
-        (fn [_]
-          (let [wire (show/get-props component :wire)
-                y (.-y (gstyle/getPosition node))
-                height (.-height (gstyle/getSize node))]
-            ;; Old
-            (w/act wire :init-height {:height height})
-            ;; New
-            (w/act wire :init-dimensions {:size (gstyle/getSize node)
-                                          :position (gstyle/getPosition node)})
-            (println "item mounted y: " y " height: " height)))
-        50)))
+    (w/act (show/get-props component :wire) ::item-mounted {::component component}))
   (render [{:as props :keys [wire item-props item-component selected?]}
            {:as state :keys [sorting item-ref]}]
-    (println item-ref)
     (dom/li {:class {"selected" selected?} :ref item-ref}
       (item-component (merge item-props
                              {:wire wire
@@ -123,44 +102,15 @@
   "Floating display only copy of selected SortedItem. We pass in a junk wire to
   ensure that none of the events can pass"
   [component]
-  (render [{:as props :keys [pos item-component item-props wire]} _]
+  (render [{:as props :keys [bounds item-component item-props wire]} _]
     (dom/li {:style {:opacity 0.95
                      :position "absolute"
                      :cursor "move"
                      :backgroundColor "#eee"
-                     :top (:y pos)
-                     :left (:x pos)}}
+                     :top  (:top bounds)
+                     :left (:left bounds)}}
       (item-component (merge item-props {:hotspot-wire (w/wire)
                                          :wire (w/wire)})))))
-
-(defn build-sorted-items
-  "Build the sequence of SortedItem components. We are also laying the items id
-  so we can keep track of which sorted item is being acted upon"
-  [wire component item-component item-refs]
-  (let [{:keys [wire selected-id sorted-ids]} (show/get-state component)]
-    (for [id sorted-ids]
-      (SortedItem {:item-id id
-                   :item-refs item-refs
-                   :wire (w/lay wire nil {:id id})
-                   :selected? (= selected-id id)
-                   :item-props (get-item-by-id component id)
-                   :item-component item-component}))))
-
-(defn floating-item
-  "Build FloatingItem component"
-  [wire component selected-id props state]
-  (FloatingItem {:item-props (get-item-by-id component selected-id)
-                 :wire wire
-                 :item-component (:item-component props)
-                 :pos (:floating-pos state)}))
-
-(defn- sort-started
-  [component selected-id floating-pos]
-  (show/assoc! component
-    :selected-id selected-id
-    :selected-idx (.indexOf (clj->js (show/get-state component :sorted-ids)) selected-id)
-    :floating-pos floating-pos
-    :sorting? true))
 
 (defn- extract-at-position
   "return new sequence with item removed at index"
@@ -181,61 +131,56 @@
       (extract-at-position sorted-list)
       (inject-at-position item index)))
 
-(defn- sort-dragging
-  [component floating-pos]
-  (show/assoc! component :floating-pos floating-pos)
-  ;; (println "pos: " (:y floating-pos) (show/get-state component :height-seq))
-  (let [{:keys [height-seq selected-idx selected-id]} (show/get-state component)
-        [idx _] (split-with (partial >= (:y floating-pos)) height-seq)
-        idx (count idx)]
-    (when (not= (dec idx) selected-idx)
-      (show/assoc! component :selected-idx (dec idx))
-      (show/update! component :sorted-ids #(swap-item % selected-id idx))
-
-      (w/act (show/get-state component :wire) ::sorting-updated
-        {:item-id selected-id
-         :updated-idx (dec idx)
-         :sort (show/get-state component :sorted-ids)}))))
-
-(defn- sort-ended [component]
-  (let [{:keys [wire selected-id selected-idx sorted-ids]} (show/get-state component)]
-    (w/act wire ::sorting-ended
-      {:item-id selected-id
-       :updated-idx selected-idx
-       :sort sorted-ids})
-
-    (show/assoc! component
-      :sorting? false
-      :selected-id nil
-      :selected-idx nil)))
-
-(defn update-height [component id height]
-  (show/assoc-in! component [:height-by-id id] height)
-  (show/assoc! component :height-seq
-               (loop [ids (show/get-state component :sorted-ids)
-                      h 0
-                      heights []]
-                 (if-not (seq ids)
-                   heights
-                   (let [id (first ids)
-                         height (show/get-state component [:height-by-id id])]
-                     (recur
-                       (rest ids)
-                       (+ h height)
-                       (conj heights h)))))))
-
-
 (defn tap-sortables
   "Setup wiretaps for all the sortable actions that are passed back from the
   SortedItem components"
   [wire component]
   (w/taps wire
-    :sort-started    #(sort-started component (:id %) {:x (:x %) :y (:y %)})
-    :sort-dragging   #(sort-dragging component (select-keys % [:x :y]))
-    :sort-ended      #(sort-ended component)
-    :init-dimensions #(println %)
-    :init-height     #(update-height component (:id %) (:height %))))
+    ::sort-started
+      (fn [{::keys [bounds id]}]
+        (show/assoc! component
+          :selected-id id
+          :selected-idx (.indexOf (clj->js (show/get-state component :sorted-ids)) id)
+          :floating-pos {:top (.-top bounds) :left (.-left bounds)}
+          :sorting? true))
+    ::sort-dragging
+      (fn [{::keys [bounds]}]
+        (show/assoc! component :floating-pos {:top (.-top bounds) :left (.-left bounds)}))
+    ::sort-ended
+      (fn [evt]
+        (let [{:keys [selected-id selected-idx sorted-ids]} (show/get-state component)]
+          (w/act wire ::sorting-ended
+            {:item-id selected-id
+             :updated-idx selected-idx
+             :sort sorted-ids})
 
+          (show/assoc! component
+            :sorting? false
+            :selected-id nil
+            :selected-idx nil)))))
+
+(defn group-wire-tap
+  [wire]
+  (let [group-data (atom {})
+        current-sizes (atom {})]
+    (w/taps wire
+    ::container-mounted
+      (fn [{::keys [component]}]
+        (swap! group-data assoc :container component))
+    ::item-mounted
+      (fn [{:as evt ::keys [component id]}]
+        (swap! group-data assoc-in [:items id] component))
+    ::sort-started
+      (fn [evt]
+        (swap! current-sizes assoc :container
+               (-> @group-data
+                 :container
+                 (show/get-state :ref)
+                 (gobj/get "current")
+                 gstyle/getBounds)))
+    ::sort-dragging
+      (fn [{:as evt ::keys [bounds]}]
+        (println (.intersects bounds (:container @current-sizes)))))))
 
 (show/defcomponent Sortable
   "Base sortable React/show class.
@@ -259,8 +204,7 @@
      :sorted-ids (or sorted-ids (mapv item-key items))
 
      ;; Stored refs, for bounds lookups
-     :container-ref (show/create-ref)
-     :item-refs (atom {})
+     :ref (show/create-ref)
 
      ;; Dimentions
      :dimentions-by-id {}
@@ -273,12 +217,13 @@
      :width-by-id {}
 
      ;; Selected states
-     :floating-pos {:x 0 :y 0}
+     :floating-pos {:top 0 :left 0}
      :selected-idx nil
      :selected-id nil
      :sorting? false})
 
   (did-mount
+    (w/act (show/get-state component :wire) ::container-mounted {::component component})
     (let [{:keys [items item-key]} (show/get-props component)]
       (normalize-items component items item-key)))
 
@@ -289,16 +234,23 @@
       (normalize-items component items item-key)))
 
   (render [{:as props :keys [container-id container-classes item-key item-component]}
-           {:as state :keys [wire sorting? sorted-ids selected-id offsets-by-id
-                             item-refs container-ref]}]
-    (let [sorted-list (build-sorted-items wire component item-component item-refs)
+           {:as state :keys [wire sorting? sorted-ids selected-id offsets-by-id ref]}]
+    (let [sorted-list (for [id sorted-ids]
+                        (SortedItem {:key id
+                                     :wire (w/lay wire nil {::id id})
+                                     :selected? (= selected-id id)
+                                     :item-props (get-item-by-id component id)
+                                     :item-component item-component}))
           sorted-list (if sorting?
                         (conj sorted-list
-                          (floating-item wire component selected-id props state))
+                              (FloatingItem {:item-props (get-item-by-id component selected-id)
+                                             :wire wire
+                                             :item-component (:item-component props)
+                                             :bounds (:floating-pos state)}))
                         sorted-list)]
       ;; List out all the sortable items, even the selected ones
       (dom/ul
-        (cond-> {:key "list" :class "sort-list" :ref container-ref}
+        (cond-> {:key "list" :class "sort-list" :ref ref}
           container-id (assoc :id container-id)
           container-classes (update :class #(str % " " container-classes)))
         sorted-list))))

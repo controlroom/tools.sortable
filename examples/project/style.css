@@ -1,6 +1,9 @@
 #lanes {
   display: flex;
   flex-direction: row;
+  background-color: orange;
+  width: 400px;
+  height: 600px
 }
 
 #lanes li div {
@@ -13,6 +16,5 @@
 }
 
 .sort-list li {
-  background-color: #FFF;
   list-decoration: none;
 }
