@@ -1,4 +1,7 @@
 (ns tools.sortable
+  "Things to experiment with:
+     - Group wire. Build a wire that can be passed into Sortables that
+   will keep track of the refs. This might be even better!"
   (:require
     [show.core    :as show]
     [show.dom     :as dom]
@@ -15,7 +18,6 @@
 
 ;; Utility functions
 ;;
-
 (defn get-item-by-id [component id]
   (show/get-state component [:items-by-id id]))
 
@@ -84,11 +86,19 @@
 
 (show/defcomponent SortedItem
   "List item, acting as a wrapper that will capture mouse down click for
-  sorting initialization. Sending up the items y top offset after it is
-  mounted"
+  sorting initialization. We also have some insane ref management required for
+  looking up dom sizes during dragging transitions"
   [component]
+  (initial-state
+    {:item-ref (show/create-ref)})
+  (will-unmount
+    (let [{:keys [item-refs item-id]} (show/get-props component)]
+      (swap! item-refs dissoc item-id)))
   (did-mount
-    (let [node (show/get-node component)]
+    (let [node (show/get-node component)
+          {:keys [item-refs item-id]} (show/get-props component)
+          {:keys [item-ref]} (show/get-state component)]
+      (swap! item-refs assoc item-id item-ref)
       (js/setTimeout
         (fn [_]
           (let [wire (show/get-props component :wire)
@@ -102,8 +112,9 @@
             (println "item mounted y: " y " height: " height)))
         50)))
   (render [{:as props :keys [wire item-props item-component selected?]}
-           {:as state :keys [sorting]}]
-    (dom/li {:class {"selected" selected?}}
+           {:as state :keys [sorting item-ref]}]
+    (println item-ref)
+    (dom/li {:class {"selected" selected?} :ref item-ref}
       (item-component (merge item-props
                              {:wire wire
                               :hotspot-wire (tap-sort-item component wire)})))))
@@ -125,10 +136,11 @@
 (defn build-sorted-items
   "Build the sequence of SortedItem components. We are also laying the items id
   so we can keep track of which sorted item is being acted upon"
-  [wire component item-component]
+  [wire component item-component item-refs]
   (let [{:keys [wire selected-id sorted-ids]} (show/get-state component)]
     (for [id sorted-ids]
-      (SortedItem {:key id
+      (SortedItem {:item-id id
+                   :item-refs item-refs
                    :wire (w/lay wire nil {:id id})
                    :selected? (= selected-id id)
                    :item-props (get-item-by-id component id)
@@ -240,11 +252,15 @@
   (default-props
     {:item-component BaseRenderedItem
      :wire           (w/wire)
-     :item-key       :id })
+     :item-key       :id})
 
   (initial-state [{:keys [wire items item-key sorted-ids]}]
     {:wire (tap-sortables wire component)
      :sorted-ids (or sorted-ids (mapv item-key items))
+
+     ;; Stored refs, for bounds lookups
+     :container-ref (show/create-ref)
+     :item-refs (atom {})
 
      ;; Dimentions
      :dimentions-by-id {}
@@ -273,15 +289,16 @@
       (normalize-items component items item-key)))
 
   (render [{:as props :keys [container-id container-classes item-key item-component]}
-           {:as state :keys [wire sorting? sorted-ids selected-id offsets-by-id]}]
-    (let [sorted-list (build-sorted-items wire component item-component)
+           {:as state :keys [wire sorting? sorted-ids selected-id offsets-by-id
+                             item-refs container-ref]}]
+    (let [sorted-list (build-sorted-items wire component item-component item-refs)
           sorted-list (if sorting?
                         (conj sorted-list
                           (floating-item wire component selected-id props state))
                         sorted-list)]
       ;; List out all the sortable items, even the selected ones
       (dom/ul
-        (cond-> {:key "list" :class "sort-list"}
+        (cond-> {:key "list" :class "sort-list" :ref container-ref}
           container-id (assoc :id container-id)
           container-classes (update :class #(str % " " container-classes)))
         sorted-list))))
