@@ -11,6 +11,10 @@
 
   :plugins [[lein-cljsbuild "1.1.7"]]
 
+  :profiles {:dev {:dependencies [[cider/piggieback "0.3.6"]
+                                  [org.clojure/tools.nrepl "0.2.13"]]
+                   :repl-options {:nrepl-middleware [cider.piggieback/wrap-cljs-repl]}}}
+
   :source-paths ["src"]
   :cljsbuild
    {:builds

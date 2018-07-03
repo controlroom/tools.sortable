@@ -10,26 +10,24 @@ Dragula / Trello as uber examples
 
 ```clojure
 (Sortable
-  {;; Debug & identifing
-   :name "type of sortable"
+  {;; Grouping (allow for traversal of items between containers)
+   :group-key "Name to signify all traversable sortables (defaults to random)"
+   :group-id "Unique group identifier. Must be unique between groupings (group-key)"
 
-   ;; Grouping (allow for multiple
-   :group-id "identifier to allow items to traverse between sortables"
-   :axis-constrain "axis for dragging constraints (:x, :y, :none)"
-   :drag-axis "axis to determine where to swap"
+   ;; Axis
+   :axis-constrain "axis for dragging constraints (:x or :y or :none)"
+   :drag-axis "axis to determine where to swap (:x or :y)"
 
    ;; Modes (interchangable between groups)
    :mode "list or grid (config varies based)"
 
    :items "vector of hash-maps"
-   :item-key "keyword that identifies identifier"
-   :item-compnent "A single component that data flows to"
+   :item-key "keyword that describes how to lookup identifier from seq of supplied items"
+   :item-compnent "A single component that data flows into via props"
    :sorted-ids "Vector of identifiers that represent the current sort via index"
 
-   :container-classes "String list of classes"
-   :container-id "String of potential id for container"
+   :container-dom-classes "String list of classes"
+   :container-dom-id "String of potential id for container"
 
-   :wire "wire to tap on sorting events"
-   }
-  )
+   :wire "wire to tap on sorting events"})
 ```
