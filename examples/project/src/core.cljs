@@ -15,20 +15,27 @@
       description)))
 
 (show/defcomponent Lane [component]
-  (render [{:as props :keys [hotspot-wire wire title items]} _]
+  (render [{:as props :keys [items hotspot-wire wire title id]} _]
     (dom/div {:class "lane"}
       (wired/h2 hotspot-wire title)
       (Sortable
-        {:name :project-tasks
-         :group-key :project-tasks
+        {:group "tasks"
+         :group-id id
          :item-component Task
          :items items}))))
 
 (def items
   "Initial project data state"
-  [{:id 1 :title "Todo" :items [{:id 10 :description "Eat Chicken"}]}
-   {:id 2 :title "Working on" :items []}
-   {:id 3 :title "Done" :items []}])
+  [{:id "165e5651-3a3f-4f87-afba-724ab90ee528" :group "projects" :title "A" :pos 0}
+   {:id "f7c83429-0565-4602-bd9b-fcdbe87f8b9e" :group "projects" :title "B" :pos 1}
+   {:id "24788a8c-6e52-43b5-a527-3794138c668f" :group "projects" :title "C" :pos 2}
+   ;; Project Items
+   {:id "b58b74a2-727d-427a-abe2-b5325f843489"
+    :group "tasks"
+    :parent-group-id "165e5651-3a3f-4f87-afba-724ab90ee528"
+    :description "Eat Chicken"
+    :pos 0}
+   ])
 
 (defn app-tap
   "App component wiretap. Responsible for updating the task data"
@@ -47,7 +54,7 @@
      :items items})
   (render [_ {:as state :keys [wire items]} ]
     (Sortable
-      {:name :project-lane
+      {:group "projects"
        :items items
        :drag-axis :x
        :item-component Lane

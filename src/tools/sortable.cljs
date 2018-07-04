@@ -182,36 +182,41 @@
         bounds-from-component #(-> % (show/get-state :ref) (gobj/get "current") gstyle/getBounds)]
     (w/taps wire
       ::container-mounted
-        (fn [{::keys [group-key group-id component]}]
-          (swap! collected assoc-in [group-key group-id :container] component))
+        (fn [evt]
+          ;; (pprint evt)
+          ;; (swap! collected assoc-in [group-key group-id :container] component)
+          )
       ::item-mounted
-        (fn [{:as evt ::keys [group-key group-id component item-id]}]
-          (swap! collected assoc-in [group-key group-id :items item-id] component))
+        (fn [_]
+          ;; (swap! collected assoc-in [group-key group-id :items item-id] component)
+          )
       ::sort-started
         (fn [evt]
-          (swap! current-sizes assoc :items
-            (reduce
-              (fn [memo [id item]]
-                (assoc memo id (bounds-from-component item)))
-              {}
-              (:items @group-data)))
-          (swap! current-sizes assoc :container (bounds-from-component (:container @group-data))))
+          (pprint evt)
+          ;; (swap! current-sizes assoc :items
+          ;;   (reduce
+          ;;     (fn [memo [id item]]
+          ;;       (assoc memo id (bounds-from-component item)))
+          ;;     {}
+          ;;     (:items @group-data)))
+          ;; (swap! current-sizes assoc :container (bounds-from-component (:container @group-data)))
+          )
       ::sort-dragging
-        (fn [{:as evt ::keys [cursor-pos bounds]}]
+        (fn [_]
           ;; (println cursor-pos)
-          (let [inside-container? (.intersects bounds (:container @current-sizes)) ]
-            (doseq [[id dim] (:items @current-sizes)]
-              ;; (println (.distance dim cursor-pos))
-              )
-            ;; (println inside-container?)
-            )
+          ;; (let [inside-container? (.intersects bounds (:container @current-sizes)) ]
+          ;;   (doseq [[id dim] (:items @current-sizes)]
+          ;;     ;; (println (.distance dim cursor-pos))
+          ;;     )
+          ;;   ;; (println inside-container?)
+          ;;   )
           ))))
 
 (defn wiretap
   "Basic wiretap allowing for a nested tapping check to ensure children
    don't tap too much"
   [wire]
-  (if (::sortable-tapped (w/data wire))
+  (if (get-in (w/data wire) [:context ::sortable-tapped])
     wire
     (wiretap* (w/lay wire nil {::sortable-tapped true}))))
 
@@ -233,16 +238,18 @@
     {:item-component BaseRenderedItem
      :wire           (w/wire)
      :item-key       :id
-     :group-key      (gensym "group-key")
-     :group-id       (gensym "group-id")})
+     :group-id       (gensym "group-id")
+     :group          (gensym "group")})
 
   ;; initialState
   ;;
-  (initial-state [{:keys [group-key group-id items wire
-                          item-key sorted-ids]}]
+  (initial-state [{:keys [group group-id items wire item-key
+                          drag-axis axis-constrain]}]
     {;; Basic requirements
-     :wire (wiretap wire)
-     :sorted-ids (or sorted-ids (mapv item-key items))
+     :wire (wiretap (w/lay wire nil {::group group
+                                     ::group-id group-id
+                                     ::drag-axis drag-axis
+                                     ::axis-constrain axis-constrain}))
 
      ;; Normalized items grouped by identifier. We affect this during group
      ;; item traversals
@@ -275,29 +282,26 @@
 
   ;; Render
   ;;
-  (render [{:as props :keys [items group-key group-id container-dom-id
+  (render [{:as props :keys [items group group-id container-dom-id
                              container-dom-classes item-key item-component]}
-           {:as state :keys [wire sorting? sorted-ids selected-id offsets-by-id ref]}]
-    (let [sorted-list (for [id sorted-ids]
-                        (SortedItem
-                          {:key id
-                           :sorting? sorting?
-                           :wire (w/lay wire nil {::item-id id
-                                                  ::group-key group-key
-                                                  ::group-id group-id})
-                           :selected? (= selected-id id)
-                           :item-props (get-item-by-id component id)
-                           :item-component item-component}))]
-      ;; (println sorted-list)
-      ;; List out all the sortable items, even the selected ones
-      (dom/ul (cond-> {:key "list" :class "sort-list" :ref ref}
-                container-dom-id (assoc :id container-dom-id)
-                container-dom-classes (update :class #(str % " " container-dom-classes)))
-        (if sorting?
-          (conj sorted-list
-                (FloatingItem
-                  {:item-props (get-item-by-id component selected-id)
-                   :wire wire
-                   :item-component (:item-component props)
-                   :bounds (:floating-pos state)}))
-          sorted-list)))))
+           {:as state :keys [wire floating-pos sorting? selected-id ref]}]
+    (dom/ul (cond-> {:key "list" :class "sort-list" :ref ref}
+              container-dom-id (assoc :id container-dom-id)
+              container-dom-classes (update :class #(str % " " container-dom-classes)))
+      (->> items
+        (filter #(= (:group %) group))
+        (sort-by :pos)
+        (map (fn [{:as data :keys [id]}]
+               (SortedItem
+                 {:key id
+                  :sorting? sorting?
+                  :wire (w/lay wire nil {::item-id id})
+                  :selected? (= selected-id id)
+                  :item-props data
+                  :item-component item-component})))
+        (#(cond-> %
+            sorting? (conj (FloatingItem
+                             {:item-props (get-item-by-id component selected-id)
+                              :wire wire
+                              :item-component item-component
+                              :bounds floating-pos}))))))))
