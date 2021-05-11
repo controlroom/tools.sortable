@@ -1,19 +1,62 @@
-#lanes {
-  display: flex;
-  flex-direction: row;
-  background-color: orange;
-  width: 400px;
-  height: 600px
+* {
+  font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;;
+  user-select: none;
 }
 
-#lanes li div {
-  margin: 10px;
-  user-select:none;
+#lanes {
+  display: flex;
+  align-items: flex-start;
+  float: left;
+  padding: 0;
+}
+
+.lane {
+  background-color: lightgray;
+  border-radius: 6px;
+  padding: 8px;
+  width: 200px;
+  margin-right: 8px;
+}
+
+.task {
+  background-color: #fff;
+  border-radius: 6px;
+  padding: 5px;
+  margin-bottom: 5px;
+}
+
+ul {
+  padding: 0;
+  margin: 0;
+}
+
+input {
+  font-size: 1em;
+  width: 100%;
+}
+
+h2 {
+  font-size: .8em;
+  margin: 0;
+  padding-bottom: 6px;
+}
+
+h2:hover {
+  cursor: pointer;
+}
+
+.selected {
+  opacity: 0.2;
+}
+
+.floating {
+  transform: rotate(3deg);
+  z-index: 1000;
 }
 
 .sort-list {
   list-style: none;
-  padding: 0px;
+  min-height: 30px;
 }
 
 .sort-list li {

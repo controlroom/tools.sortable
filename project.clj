@@ -6,8 +6,7 @@
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/clojurescript "1.10.329"]
 
-                 [controlroom/wire "0.2.1"]
-                 [controlroom/show "0.8.0-SNAPSHOT"]]
+                 [controlroom/wired-show "0.1.0"]]
 
   :plugins [[lein-cljsbuild "1.1.7"]]
 
@@ -30,6 +29,10 @@
       :source-paths ["examples/updated/src" "src"]
       :compiler {:output-dir "examples/updated/out"
                  :output-to  "examples/updated/main.js"}}
+     {:id "swapping"
+      :source-paths ["examples/swapping/src" "src"]
+      :compiler {:output-dir "examples/swapping/out"
+                 :output-to  "examples/swapping/main.js"}}
      {:id "project"
       :source-paths ["examples/project/src" "src"]
       :compiler {:output-dir "examples/project/out"

@@ -1,0 +1,40 @@
+#boxes-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+#boxes-1, #boxes-2 {
+  width: 200px;
+  background-color: #aaa;
+  margin: 10px;
+  padding: 10px;
+  min-height: 50px ;
+}
+
+.sort-list {
+  list-style: none;
+  padding: 0px;
+}
+
+.sort-list li {
+  list-decoration: none;
+  border: black solid 0.5px;
+}
+
+.sort-list p {
+  user-select: none;
+  margin: 0;
+}
+
+.selected {
+  opacity: 0.5;
+}
+
+.floating {
+  z-index: 1000;
+}
+
+/* .floating p { */
+/*   margin: 0; */
+/* } */
